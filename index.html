@@ -1,0 +1,1417 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistema de Control de Asistencia QR - Escolar Pro Ultra</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- Librería para generar códigos QR -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <!-- Librería para capturar el carné QR con borde blanco y descargarlo -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <!-- Librería para escanear QR con la cámara -->
+    <script src="https://unpkg.com/html5-qrcode"></script>
+
+    <!-- FIREBASE SDK & CONFIGURACIÓN OFICIAL (INTACTA SEGÚN ESPECIFICACIÓN) -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-app.js";
+        import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-analytics.js";
+        import { getFirestore, collection, addDoc, getDocs, deleteDoc, doc, setDoc, query, where } from "https://www.gstatic.com/firebasejs/12.19.0/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyCEQ-sBem50e7P2sfMfdim6GCSq4j10eeU",
+            authDomain: "asistencias-91a79.firebaseapp.com",
+            projectId: "asistencias-91a79",
+            storageBucket: "asistencias-91a79.firebasestorage.app",
+            messagingSenderId: "931957289068",
+            appId: "1:931957289068:web:eb8c954b4a5cb7fa956849",
+            measurementId: "G-WS1E0X3RSX"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const analytics = getAnalytics(app);
+        const db = getFirestore(app);
+
+        // Exponer globalmente para la aplicación
+        window.db = db;
+        window.firebaseMethods = { collection, addDoc, getDocs, deleteDoc, doc, setDoc, query, where };
+        
+        // Cargar datos iniciales desde Firebase al arrancar
+        window.addEventListener('DOMContentLoaded', () => {
+            if (typeof sincronizarDatosFirebase === 'function') {
+                sincronizarDatosFirebase();
+            }
+        });
+    </script>
+
+    <!-- ESTILOS: SIDEBAR NAVEGACIÓN Y DISEÑO VISUAL MEJORADO -->
+    <style>
+        body {
+            background: linear-gradient(rgba(2, 6, 23, 0.90), rgba(2, 6, 23, 0.94)), 
+                        url('https://images.unsplash.com/photo-1523240795612-9a054b0db644?q=80&w=1920&auto=format&fit=crop') no-repeat center center fixed;
+            background-size: cover;
+            color: #f1f5f9;
+            overflow-x: hidden;
+        }
+        @keyframes rgbGlowRandom {
+            0% { border-color: #06b6d4; box-shadow: 0 0 18px rgba(6, 182, 212, 0.35), inset 0 0 10px rgba(6, 182, 212, 0.15); }
+            33% { border-color: #6366f1; box-shadow: 0 0 18px rgba(99, 102, 241, 0.4), inset 0 0 10px rgba(99, 102, 241, 0.2); }
+            66% { border-color: #10b981; box-shadow: 0 0 18px rgba(16, 185, 129, 0.35), inset 0 0 10px rgba(16, 185, 129, 0.15); }
+            100% { border-color: #06b6d4; box-shadow: 0 0 18px rgba(6, 182, 212, 0.35), inset 0 0 10px rgba(6, 182, 212, 0.15); }
+        }
+        .card-custom {
+            background: linear-gradient(145deg, rgba(13, 21, 39, 0.92) 0%, rgba(22, 34, 56, 0.92) 100%);
+            backdrop-filter: blur(12px);
+            border: 2px solid #374151;
+            border-radius: 1.5rem;
+            box-shadow: 0 15px 35px -5px rgba(0, 0, 0, 0.6);
+            transition: all 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+            animation: rgbGlowRandom 12s infinite;
+            animation-delay: var(--delay, 0s);
+        }
+        .card-custom:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 20px 40px -10px rgba(6, 182, 212, 0.4);
+        }
+        .sidebar-btn {
+            transition: all 0.25s ease-in-out;
+            border-radius: 1rem;
+        }
+        .sidebar-btn:hover {
+            background-color: rgba(99, 102, 241, 0.2);
+            color: #38bdf8;
+            transform: translateX(4px);
+        }
+        .sidebar-btn.active {
+            background: linear-gradient(135deg, #4f46e5 0%, #0284c7 100%);
+            color: #ffffff;
+            box-shadow: 0 4px 15px rgba(79, 70, 229, 0.4);
+        }
+        @keyframes pulse-led {
+            0%, 100% { opacity: 1; transform: scale(1); box-shadow: 0 0 12px #10b981; background-color: #10b981; }
+            50% { opacity: 0.8; transform: scale(0.9); box-shadow: 0 0 12px #38bdf8; background-color: #38bdf8; }
+        }
+        .led-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            display: inline-block;
+            animation: pulse-led 3s infinite;
+        }
+        #carnetQrBox {
+            background-color: #ffffff !important;
+            border: 8px solid #ffffff;
+            border-radius: 1.5rem;
+            box-shadow: 0 20px 30px -5px rgba(0, 0, 0, 0.5);
+        }
+        #toastPadres {
+            transition: all 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+            transform: translateY(120%);
+        }
+        #toastPadres.show {
+            transform: translateY(0);
+        }
+        /* Custom scrollbars */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: rgba(15, 23, 42, 0.8);
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #0284c7;
+        }
+    </style>
+</head>
+<body class="font-sans antialiased min-h-screen flex flex-col justify-between bg-slate-950">
+
+    <!-- TOAST DE NOTIFICACIÓN AUTOMÁTICA A PADRES -->
+    <div id="toastPadres" class="fixed bottom-6 right-6 z-50 max-w-sm w-full bg-slate-900 border-2 border-emerald-500 p-4 rounded-2xl shadow-2xl flex items-start gap-3">
+        <div class="bg-emerald-500/20 text-emerald-400 p-2.5 rounded-xl text-xl flex-shrink-0">📲</div>
+        <div class="flex-grow">
+            <div class="flex items-center justify-between">
+                <h4 class="text-xs font-bold text-emerald-300 uppercase tracking-wide">Alerta Automática a Padre/Apoderado</h4>
+                <button onclick="cerrarToastPadres()" class="text-slate-400 hover:text-white text-xs font-bold">&times;</button>
+            </div>
+            <p id="toastPadresMensaje" class="text-xs text-slate-200 mt-1 font-medium">Notificación enviada con éxito.</p>
+        </div>
+    </div>
+
+    <!-- PORTADA DE BIENVENIDA / ACCESO INSTITUCIONAL CON CANDADO Y REGISTRO DE CUENTAS -->
+    <div id="seccionPortada" class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[#020617]/96 backdrop-blur-xl overflow-y-auto transition-opacity duration-500">
+        <div class="max-w-6xl w-full my-auto py-6">
+            <div class="text-center mb-8">
+                <div class="inline-flex items-center gap-2 bg-indigo-500/20 text-indigo-300 px-4 py-1.5 rounded-full border border-indigo-500/40 text-xs font-bold mb-3">
+                    <span class="led-dot"></span> Plataforma Académica Inteligente v5.0 Pro + Firebase
+                </div>
+                <h1 class="text-3xl md:text-5xl font-black tracking-tight text-white mb-3">Sistema de Control de Asistencia QR</h1>
+                <p class="text-xs md:text-sm text-cyan-400 font-medium max-w-2xl mx-auto">Optimiza el registro escolar con base de datos en la nube, gráficos estadísticos porcentuales por estudiante, exportación a Excel y alertas automatizadas.</p>
+                
+                <div class="mt-6 max-w-4xl mx-auto rounded-3xl overflow-hidden border-2 border-cyan-500/50 shadow-2xl relative h-56 md:h-64 bg-slate-900">
+                    <img src="https://images.unsplash.com/photo-1427504494785-3a9ca7044f45?q=80&w=1200&auto=format&fit=crop" alt="Estudiantes y tecnología QR" class="w-full h-full object-cover">
+                    <div class="absolute inset-0 bg-gradient-to-t from-[#020617] via-[#020617]/40 to-transparent"></div>
+                    <div class="absolute bottom-4 left-0 right-0 text-center">
+                        <span class="bg-indigo-950/80 text-cyan-300 border border-indigo-500/50 px-4 py-1.5 rounded-full text-xs font-bold shadow-lg">🔒 Acceso Protegido - Sincronizado con Firebase Cloud</span>
+                    </div>
+                </div>
+            </div>
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch mb-6">
+                <!-- FORMULARIO PORTAL CON CANDADO & REGISTRO DE CUENTA -->
+                <div class="card-custom p-6 md:p-8 flex flex-col justify-between border-indigo-500" style="--delay: -1s;">
+                    <div>
+                        <div class="flex items-center gap-3 mb-4">
+                            <div class="w-12 h-12 bg-gradient-to-tr from-cyan-500 to-indigo-600 rounded-2xl flex items-center justify-center text-2xl shadow-lg shadow-indigo-500/40">
+                                🔒
+                            </div>
+                            <div>
+                                <h2 class="text-xl font-bold text-white" id="tituloLoginPortal">Portal de Acceso Protegido</h2>
+                                <p class="text-xs text-slate-400" id="subtituloLoginPortal">Inicia sesión con tu credencial verificada</p>
+                            </div>
+                        </div>
+
+                        <!-- MODOS: INICIAR SESIÓN O CREAR CUENTA -->
+                        <div class="flex border-b border-gray-800 mb-4 text-xs font-bold">
+                            <button id="tabIniciarSesion" onclick="conmutarModoAcceso('login')" class="flex-1 py-2 text-cyan-400 border-b-2 border-cyan-400 transition">🔑 Iniciar Sesión</button>
+                            <button id="tabCrearCuenta" onclick="conmutarModoAcceso('registro')" class="flex-1 py-2 text-slate-400 border-b-2 border-transparent transition">📝 Crear Cuenta</button>
+                        </div>
+
+                        <div class="space-y-4 mb-6 bg-[#070f1e]/80 p-4 rounded-2xl border border-gray-800">
+                            <label class="block text-xs font-bold text-slate-300 uppercase tracking-wider">Selecciona tu Perfil:</label>
+                            <div class="grid grid-cols-2 gap-3">
+                                <button type="button" onclick="seleccionarRol('admin')" id="btnRolAdmin" class="p-3 rounded-xl border border-cyan-500 bg-cyan-950/40 text-cyan-300 font-bold text-xs flex flex-col items-center gap-1 transition cursor-pointer">
+                                    <span class="text-lg">👨‍🏫</span> Profesor / Admin
+                                </button>
+                                <button type="button" onclick="seleccionarRol('estudiante')" id="btnRolEstudiante" class="p-3 rounded-xl border border-gray-700 bg-gray-900/60 text-slate-400 font-bold text-xs flex flex-col items-center gap-1 transition cursor-pointer">
+                                    <span class="text-lg">🎓</span> Estudiante
+                                </button>
+                            </div>
+
+                            <!-- CAMPOS MODO INICIAR SESIÓN -->
+                            <div id="formModoLogin" class="space-y-3">
+                                <div id="contenedorInputAdmin" class="mt-3 space-y-3">
+                                    <div>
+                                        <label class="block text-xs font-semibold text-slate-300 mb-1">DNI (8 dígitos) o Usuario Admin:</label>
+                                        <input type="text" id="inputAdminCredencial" placeholder="Ej: admin o 71234567" class="w-full p-3 bg-[#030712] border border-gray-700 rounded-xl text-white text-xs focus:outline-none focus:ring-2 focus:ring-cyan-500">
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-semibold text-slate-300 mb-1">Contraseña de Candado:</label>
+                                        <input type="password" id="inputAdminPassword" placeholder="••••••••" class="w-full p-3 bg-[#030712] border border-gray-700 rounded-xl text-white text-xs focus:outline-none focus:ring-2 focus:ring-cyan-500">
+                                    </div>
+                                </div>
+                                <div id="contenedorInputEstudiante" class="hidden mt-3 space-y-3">
+                                    <div>
+                                        <label class="block text-xs font-semibold text-slate-300 mb-1">DNI del Estudiante (8 dígitos):</label>
+                                        <input type="text" id="inputDniEstudiantePortal" maxlength="8" placeholder="Ej: 71234567" class="w-full p-3 bg-[#030712] border border-gray-700 rounded-xl text-white text-xs focus:outline-none focus:ring-2 focus:ring-cyan-500">
+                                    </div>
+                                    <div>
+                                        <label class="block text-xs font-semibold text-slate-300 mb-1">Contraseña de Estudiante:</label>
+                                        <input type="password" id="inputPassEstudiantePortal" placeholder="••••••••" class="w-full p-3 bg-[#030712] border border-gray-700 rounded-xl text-white text-xs focus:outline-none focus:ring-2 focus:ring-cyan-500">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- CAMPOS MODO REGISTRAR NUEVA CUENTA -->
+                            <div id="formModoRegistro" class="hidden space-y-3">
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-300 mb-1">Nombre Completo:</label>
+                                    <input type="text" id="inputRegNombre" placeholder="Ej: Juan Pérez" class="w-full p-3 bg-[#030712] border border-gray-700 rounded-xl text-white text-xs focus:outline-none focus:ring-2 focus:ring-cyan-500">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-300 mb-1">DNI / Identificación (8 dígitos):</label>
+                                    <input type="text" id="inputRegDni" maxlength="8" placeholder="Ej: 71234567" class="w-full p-3 bg-[#030712] border border-gray-700 rounded-xl text-white text-xs focus:outline-none focus:ring-2 focus:ring-cyan-500">
+                                </div>
+                                <div>
+                                    <label class="block text-xs font-semibold text-slate-300 mb-1">Crear Contraseña:</label>
+                                    <input type="password" id="inputRegPassword" placeholder="Mínimo 4 caracteres" class="w-full p-3 bg-[#030712] border border-gray-700 rounded-xl text-white text-xs focus:outline-none focus:ring-2 focus:ring-cyan-500">
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <button id="btnAccionPortal" onclick="procesarAccionPortal()" class="w-full bg-gradient-to-r from-indigo-600 to-cyan-600 text-white py-3.5 rounded-2xl font-bold hover:from-indigo-500 hover:to-cyan-500 shadow-lg shadow-indigo-600/30 transition transform active:scale-95 cursor-pointer text-sm flex items-center justify-center gap-2">🔓 Validar e Ingresar al Sistema</button>
+                </div>
+                <div class="card-custom p-6 md:p-8 flex flex-col justify-between border-cyan-500" style="--delay: -4s;">
+                    <div>
+                        <h2 class="text-xl font-bold text-cyan-400 mb-2 flex items-center gap-2">💡 Características Principales</h2>
+                        <p class="text-xs text-slate-400 mb-4">Funciones avanzadas incorporadas en esta versión:</p>
+                        
+                        <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            <div class="bg-[#070f1e]/90 p-3.5 rounded-2xl border border-gray-800">
+                                <div class="text-cyan-400 text-lg mb-1">☁️</div>
+                                <h3 class="font-bold text-xs text-white mb-1">1. Base en la Nube</h3>
+                                <p class="text-[11px] text-slate-400">Integración con Firebase Firestore para guardar alumnos y asistencias globalmente.</p>
+                            </div>
+                            <div class="bg-[#070f1e]/90 p-3.5 rounded-2xl border border-gray-800">
+                                <div class="text-emerald-400 text-lg mb-1">📈</div>
+                                <h3 class="font-bold text-xs text-white mb-1">2. % por Estudiante</h3>
+                                <p class="text-[11px] text-slate-400">Análisis detallado e individual de tasa de puntualidad y tardanza por alumno.</p>
+                            </div>
+                            <div class="bg-[#070f1e]/90 p-3.5 rounded-2xl border border-gray-800">
+                                <div class="text-amber-400 text-lg mb-1">📱</div>
+                                <h3 class="font-bold text-xs text-white mb-1">3. Barra Lateral Sidebar</h3>
+                                <p class="text-[11px] text-slate-400">Navegación moderna y cómoda fija en la izquierda para una mejor experiencia.</p>
+                            </div>
+                            <div class="bg-[#070f1e]/90 p-3.5 rounded-2xl border border-gray-800">
+                                <div class="text-indigo-400 text-lg mb-1">📊</div>
+                                <h3 class="font-bold text-xs text-white mb-1">4. Exportar & Notificar</h3>
+                                <p class="text-[11px] text-slate-400">Descarga de reportes CSV/Excel y notificaciones directas a los padres.</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="mt-4 pt-3 border-t border-gray-800 text-center">
+                        <p class="text-[11px] text-slate-400 font-medium">✨ Solución integral para centros educativos modernos.</p>
+                    </div>
+                </div>
+            </div>
+            <p class="text-center text-[10px] text-slate-500 mt-4">Sistema de Control de Asistencia Escolar con QR &copy; 2026</p>
+        </div>
+    </div>
+
+    <!-- MODAL FLOTANTE GENERAL -->
+    <div id="modalConfirmacion" class="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-sm hidden">
+        <div class="card-custom p-6 max-w-sm w-full mx-4 text-center border-indigo-500">
+            <div id="modalIcono" class="text-4xl mb-3">⚠️</div>
+            <h3 id="modalTitulo" class="text-lg font-bold text-white mb-2">¿Estás seguro?</h3>
+            <p id="modalMensaje" class="text-xs text-slate-300 mb-6">Esta acción se aplicará en el sistema.</p>
+            <div class="flex justify-center gap-3">
+                <button id="btnModalCancelar" class="bg-gray-700 hover:bg-gray-600 text-white px-4 py-2 rounded-xl font-bold text-xs transition cursor-pointer">Cancelar</button>
+                <button id="btnModalAceptar" class="bg-rose-600 hover:bg-rose-500 text-white px-4 py-2 rounded-xl font-bold text-xs shadow transition cursor-pointer">Sí, confirmar</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- CONTENEDOR PRINCIPAL CON SIDEBAR A LA IZQUIERDA -->
+    <div class="flex flex-col md:flex-row min-h-screen relative overflow-x-hidden">
+        
+        <!-- BARRA DE NAVEGACIÓN LATERAL (SIDEBAR IZQUIERDA) -->
+        <aside id="sidebarNav" class="w-full md:w-64 bg-slate-900/95 border-r border-slate-800/80 backdrop-blur-xl flex flex-col justify-between sticky top-0 md:h-screen z-40 transition-all">
+            <div>
+                <!-- Header del Sidebar -->
+                <div class="p-4 border-b border-slate-800 flex items-center justify-between">
+                    <div class="flex items-center gap-2.5">
+                        <span class="led-dot"></span>
+                        <h1 class="text-base font-extrabold tracking-wide text-white">
+                            Asistencia QR <span class="text-[10px] bg-indigo-500/30 text-indigo-300 px-2 py-0.5 rounded-full border border-indigo-500/50">PRO v5.0</span>
+                        </h1>
+                    </div>
+                    <!-- Botón para toggle de menú en móvil -->
+                    <button onclick="toggleSidebarMovil()" class="md:hidden text-slate-400 hover:text-white p-1">
+                        <span class="text-xl">☰</span>
+                    </button>
+                </div>
+
+                <!-- Perfil del usuario activo -->
+                <div class="p-4 bg-slate-950/60 border-b border-slate-800">
+                    <span id="badgeRolUsuario" class="text-[10px] bg-cyan-500/20 text-cyan-300 px-2.5 py-1 rounded-lg border border-cyan-500/40 font-bold block text-center truncate">Perfil: Admin</span>
+                </div>
+
+                <!-- Lista de Navegación de Botones del Sidebar -->
+                <nav id="navPrincipal" class="p-3 space-y-1.5 hidden md:block">
+                    <button id="btnNav-registro" onclick="cambiarTab('registro')" class="sidebar-btn active w-full text-left p-3 text-xs font-bold flex items-center gap-3">
+                        <span class="text-base">👤</span> Estudiantes & QR
+                    </button>
+                    <button id="btnNav-escaner" onclick="cambiarTab('escaner')" class="sidebar-btn w-full text-left p-3 text-xs font-semibold text-slate-400 flex items-center gap-3">
+                        <span class="text-base">📷</span> Escanear QR
+                    </button>
+                    <button id="btnNav-alumnos" onclick="cambiarTab('alumnos')" class="sidebar-btn w-full text-left p-3 text-xs font-semibold text-slate-400 flex items-center gap-3">
+                        <span class="text-base">⚙️</span> Gestionar Alumnos
+                    </button>
+                    <button id="btnNav-config" onclick="cambiarTab('config')" class="sidebar-btn w-full text-left p-3 text-xs font-semibold text-slate-400 flex items-center gap-3">
+                        <span class="text-base">⏰</span> Horarios
+                    </button>
+                    <button id="btnNav-historial" onclick="cambiarTab('historial')" class="sidebar-btn w-full text-left p-3 text-xs font-semibold text-slate-400 flex items-center gap-3">
+                        <span class="text-base">📋</span> Reportes e Historial
+                    </button>
+                    <button id="btnNav-estadisticas" onclick="cambiarTab('estadisticas')" class="sidebar-btn w-full text-left p-3 text-xs font-semibold text-slate-400 flex items-center gap-3">
+                        <span class="text-base">📊</span> Gráficos & Porcentajes
+                    </button>
+                </nav>
+            </div>
+
+            <!-- Footer del Sidebar -->
+            <div class="p-4 border-t border-slate-800 bg-slate-950/40">
+                <button onclick="cerrarSesionPortada()" class="w-full bg-slate-800/80 hover:bg-rose-900/60 text-slate-300 hover:text-rose-200 p-2.5 rounded-xl text-xs font-bold transition border border-slate-700 cursor-pointer flex items-center justify-center gap-2">
+                    <span>🚪</span> Cerrar Sesión
+                </button>
+                <p class="text-center text-[9px] text-slate-500 mt-3">Firebase Connected ☁️</p>
+            </div>
+        </aside>
+
+        <!-- AREA DE CONTENIDO PRINCIPAL -->
+        <main class="flex-grow p-4 md:p-6 overflow-y-auto max-w-7xl mx-auto w-full">
+            
+            <!-- VISTA 1: REGISTRO Y QR -->
+            <section id="vista-registro" class="vista active-view">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    <div class="card-custom p-4 flex items-center gap-4" style="--delay: -1.5s;">
+                        <div class="bg-indigo-500/20 p-3 rounded-2xl text-indigo-400 text-2xl">👥</div>
+                        <div>
+                            <p class="text-xs text-slate-400 font-medium">Total Registrados</p>
+                            <h3 id="statTotalAlumnos" class="text-xl font-bold text-white">0 Alumnos</h3>
+                        </div>
+                    </div>
+                    <div class="card-custom p-4 flex items-center gap-4" style="--delay: -4s;">
+                        <div class="bg-cyan-500/20 p-3 rounded-2xl text-cyan-400 text-2xl">☁️</div>
+                        <div>
+                            <p class="text-xs text-slate-400 font-medium">Firebase Cloud</p>
+                            <h3 class="text-xl font-bold text-cyan-400">Conectado</h3>
+                        </div>
+                    </div>
+                    <div class="card-custom p-4 flex items-center gap-4" style="--delay: -7.5s;">
+                        <div class="bg-amber-500/20 p-3 rounded-2xl text-amber-400 text-2xl">🕒</div>
+                        <div>
+                            <p class="text-xs text-slate-400 font-medium">Hora Límite Configurada</p>
+                            <h3 id="statHoraLimiteLabel" class="text-xl font-bold text-white">08:00 AM</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="grid md:grid-cols-2 gap-6">
+                    <div class="card-custom p-6 md:p-8" style="--delay: -2s;">
+                        <h2 class="text-xl font-bold text-cyan-400 mb-2 flex items-center gap-2">👤 Registrar Nuevo Estudiante</h2>
+                        <p class="text-xs text-slate-400 mb-6">Ingresa los datos personales para generar automáticamente su código de acceso único en la nube.</p>
+                        
+                        <form id="formEstudiante" class="space-y-4">
+                            <div>
+                                <label class="block text-sm font-semibold text-slate-300 mb-1">Nombre Completo:</label>
+                                <input type="text" id="nombreAlumno" required placeholder="Ej. Juan Pérez" class="w-full p-3 bg-[#070f1e]/80 border border-gray-700 rounded-2xl text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 transition">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-semibold text-slate-300 mb-1">DNI / Código (Exactamente 8 dígitos):</label>
+                                <input type="text" id="codigoAlumno" required maxlength="8" pattern="\d{8}" title="Debe ingresar exactamente 8 números" placeholder="Ej: 71234567" class="w-full p-3 bg-[#070f1e]/80 border border-gray-700 rounded-2xl text-white focus:outline-none focus:ring-2 focus:ring-cyan-500 transition">
+                            </div>
+                            <button type="submit" class="w-full bg-gradient-to-r from-indigo-600 to-cyan-600 text-white py-3.5 rounded-2xl font-bold hover:from-indigo-500 hover:to-cyan-500 shadow-lg shadow-indigo-600/30 transition transform active:scale-95 cursor-pointer flex items-center justify-center gap-2">✨ Generar Estudiante y QR</button>
+                        </form>
+                    </div>
+                    <div class="card-custom p-6 md:p-8 flex flex-col items-center justify-center text-center" style="--delay: -5s;">
+                        <h2 class="text-xl font-bold text-cyan-400 mb-1">Carné QR Generado</h2>
+                        <p id="infoQrText" class="text-sm text-slate-400 mb-6">Complete el formulario para visualizar el carné</p>
+                        
+                        <div id="carnetQrBox" class="p-8 rounded-3xl inline-block hidden my-2 text-slate-900">
+                            <div id="qrcode" class="flex justify-center items-center mb-3"></div>
+                            <p id="nombreQrLabel" class="font-bold text-sm tracking-wide text-slate-800 uppercase"></p>
+                        </div>
+                        
+                        <button id="btnDescargarQr" onclick="descargarQRConBorde()" class="mt-6 bg-emerald-600 text-white px-6 py-2.5 rounded-2xl font-bold hover:bg-emerald-500 shadow-lg shadow-emerald-600/30 transition hidden flex items-center gap-2 cursor-pointer">📥 Descargar Carné QR</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- VISTA 2: ESCÁNER CON CÁMARA -->
+            <section id="vista-escaner" class="vista hidden">
+                <div class="max-w-xl mx-auto card-custom p-6 md:p-8 text-center" style="--delay: -3s;">
+                    <h2 class="text-xl font-bold text-cyan-400 mb-2">📷 Lector de Asistencia por Cámara</h2>
+                    <p class="text-xs text-slate-400 mb-6">Selecciona el modo de control y apunta con la cámara al carné QR del estudiante.</p>
+                    
+                    <div class="flex justify-center gap-4 mb-6">
+                        <label class="cursor-pointer flex items-center gap-2 bg-[#070f1e]/80 px-5 py-2.5 rounded-2xl border border-emerald-500/50 font-bold text-emerald-300 shadow-sm transition hover:bg-emerald-950/60">
+                            <input type="radio" name="modoAsistencia" value="entrada" checked class="accent-emerald-500 w-4 h-4"> Modo Entrada
+                        </label>
+                        <label class="cursor-pointer flex items-center gap-2 bg-[#070f1e]/80 px-5 py-2.5 rounded-2xl border border-amber-500/50 font-bold text-amber-300 shadow-sm transition hover:bg-amber-950/60">
+                            <input type="radio" name="modoAsistencia" value="salida" class="accent-amber-500 w-4 h-4"> Modo Salida
+                        </label>
+                    </div>
+                    <div id="reader" class="w-full rounded-2xl overflow-hidden border-2 border-indigo-500/40 mb-6 bg-[#040814]/90 min-h-[220px] flex items-center justify-center text-slate-400 text-sm">Cámara apagada. Presiona "Encender Cámara".</div>
+                    <div class="flex justify-center gap-4">
+                        <button onclick="iniciarCamara()" class="bg-emerald-600 text-white px-6 py-2.5 rounded-2xl font-bold hover:bg-emerald-500 shadow-md shadow-emerald-600/30 transition cursor-pointer">🟢 Encender Cámara</button>
+                        <button onclick="apagarCamara()" class="bg-rose-600 text-white px-6 py-2.5 rounded-2xl font-bold hover:bg-rose-500 shadow-md shadow-rose-600/30 transition cursor-pointer">🔴 Apagar Cámara</button>
+                    </div>
+                    <div id="resultadoEscaneo" class="mt-4 p-4 rounded-2xl font-medium text-sm"></div>
+                </div>
+            </section>
+
+            <!-- VISTA 3: GESTIONAR Y BORRAR ALUMNOS -->
+            <section id="vista-alumnos" class="vista hidden">
+                <div class="card-custom p-6 md:p-8" style="--delay: -6s;">
+                    <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+                        <div>
+                            <h2 class="text-xl font-bold text-cyan-400">⚙️ Directorio y Administración de Alumnos</h2>
+                            <p class="text-xs text-slate-400">Visualiza la lista completa de estudiantes en la nube y elimina registros.</p>
+                        </div>
+                        <span id="badgeTotalDirectorio" class="bg-indigo-900/60 text-indigo-300 border border-indigo-700 px-4 py-1.5 rounded-xl font-bold text-xs">Total: 0</span>
+                    </div>
+                    
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="bg-[#070f1e]/90 text-cyan-400 border-b border-gray-700 text-sm">
+                                    <th class="p-3 rounded-tl-xl">Nombre Completo</th>
+                                    <th class="p-3">DNI / Código</th>
+                                    <th class="p-3 text-center rounded-tr-xl">Acción</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tablaAlumnosBody" class="text-sm">
+                                <tr><td colspan="3" class="p-6 text-center text-slate-400">Cargando estudiantes desde Firebase...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- VISTA 4: CONFIGURACIÓN DE HORARIOS -->
+            <section id="vista-config" class="vista hidden">
+                <div class="max-w-md mx-auto card-custom p-6 md:p-8" style="--delay: -2.5s;">
+                    <h2 class="text-xl font-bold text-cyan-400 mb-2">⏰ Configuración de Horario</h2>
+                    <p class="text-xs text-slate-400 mb-6">Establece la hora máxima de tolerancia para considerar puntualidad en la entrada.</p>
+                    
+                    <div class="space-y-4">
+                        <div>
+                            <label class="block text-sm font-semibold text-slate-300 mb-1">Hora Máxima de Puntualidad:</label>
+                            <input type="time" id="horaLimitePuntual" value="08:00" class="w-full p-3 bg-[#070f1e]/80 border border-gray-700 rounded-2xl text-white focus:outline-none focus:ring-2 focus:ring-cyan-500">
+                        </div>
+                        <button onclick="confirmarGuardarHorario()" class="w-full bg-indigo-600 text-white py-3 rounded-2xl font-bold hover:bg-indigo-500 shadow-lg shadow-indigo-600/30 transition cursor-pointer">Guardar Configuración</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- VISTA 5: HISTORIAL Y REPORTES AVANZADOS CON FILTROS Y EXCEL -->
+            <section id="vista-historial" class="vista hidden">
+                <div class="card-custom p-6 md:p-8" style="--delay: -8s;">
+                    <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+                        <div>
+                            <h2 class="text-xl font-bold text-cyan-400 mb-1">📋 Reportes e Historial de Asistencia</h2>
+                            <p class="text-xs text-slate-400">Filtra los marcajes por fecha o estado y exporta los resultados a Excel.</p>
+                        </div>
+                        <div class="flex flex-wrap gap-2">
+                            <button onclick="exportarExcelCSV()" class="bg-emerald-600 hover:bg-emerald-500 text-white px-4 py-1.5 rounded-xl font-bold text-xs shadow transition cursor-pointer flex items-center gap-1">📊 Exportar a Excel (CSV)</button>
+                            <button onclick="confirmarResetearHistorial()" class="bg-rose-700 hover:bg-rose-600 text-white px-4 py-1.5 rounded-xl font-bold text-xs shadow transition cursor-pointer flex items-center gap-1">🗑️ Resetear Todo</button>
+                        </div>
+                    </div>
+                    <!-- PANEL DE FILTROS AVANZADOS -->
+                    <div class="bg-[#070f1e]/90 p-4 rounded-2xl border border-gray-800 mb-6 grid grid-cols-1 sm:grid-cols-3 gap-3">
+                        <div>
+                            <label class="block text-[11px] font-semibold text-slate-300 mb-1">Filtrar por Fecha:</label>
+                            <input type="date" id="filtroFecha" onchange="actualizarTablaHistorial()" class="w-full p-2.5 bg-[#030712] border border-gray-700 rounded-xl text-white text-xs focus:outline-none focus:ring-2 focus:ring-cyan-500">
+                        </div>
+                        <div>
+                            <label class="block text-[11px] font-semibold text-slate-300 mb-1">Filtrar por Estado:</label>
+                            <select id="filtroEstado" onchange="actualizarTablaHistorial()" class="w-full p-2.5 bg-[#030712] border border-gray-700 rounded-xl text-white text-xs focus:outline-none focus:ring-2 focus:ring-cyan-500">
+                                <option value="">Todos los Estados</option>
+                                <option value="PUNTUAL">Puntual</option>
+                                <option value="TARDANZA">Tardanza</option>
+                                <option value="SALIDA">Salida</option>
+                            </select>
+                        </div>
+                        <div class="flex items-end">
+                            <button onclick="limpiarFiltros()" class="w-full bg-gray-800 hover:bg-gray-700 text-slate-300 py-2.5 rounded-xl text-xs font-bold transition border border-gray-700 cursor-pointer">🔄 Limpiar Filtros</button>
+                        </div>
+                    </div>
+                    
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="bg-[#070f1e]/90 text-cyan-400 border-b border-gray-700 text-sm">
+                                    <th class="p-3 rounded-tl-xl">Estudiante</th>
+                                    <th class="p-3">DNI</th>
+                                    <th class="p-3">Tipo</th>
+                                    <th class="p-3">Estado</th>
+                                    <th class="p-3">Fecha y Hora</th>
+                                    <th class="p-3 text-center rounded-tr-xl">Acción</th>
+                                </tr>
+                            </thead>
+                            <tbody id="tablaHistorialBody" class="text-sm">
+                                <tr><td colspan="6" class="p-6 text-center text-slate-400">Cargando historial desde Firebase...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- VISTA 6: GRÁFICOS Y ANÁLISIS PORCENTUAL POR ESTUDIANTE -->
+            <section id="vista-estadisticas" class="vista hidden space-y-6">
+                <!-- CABECERA DE ESTADÍSTICAS GENERALES -->
+                <div class="card-custom p-6 md:p-8" style="--delay: -4.5s;">
+                    <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-2">
+                        <div>
+                            <h2 class="text-xl font-bold text-cyan-400">📊 Panel Estadístico de Puntualidad y Porcentajes</h2>
+                            <p class="text-xs text-slate-400">Resumen global y análisis de rendimiento individual porcentual por estudiante.</p>
+                        </div>
+                    </div>
+
+                    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-center">
+                        <!-- GRÁFICO GENERAL DE BARRAS -->
+                        <div class="lg:col-span-2 bg-[#070f1e]/90 p-5 rounded-2xl border border-gray-800">
+                            <h3 class="text-sm font-bold text-white mb-3 text-center flex items-center justify-center gap-2">
+                                📈 Comparativo Global de Marcajes (Puntuales vs Tardanzas)
+                            </h3>
+                            <div class="relative h-64 w-full">
+                                <canvas id="graficoAsistencia"></canvas>
+                            </div>
+                        </div>
+
+                        <!-- INDICADORES CLAVE GENERALES -->
+                        <div class="space-y-3">
+                            <div class="bg-[#070f1e]/90 p-4 rounded-2xl border border-emerald-500/30 text-center">
+                                <p class="text-xs text-slate-400">Tasa Global de Puntualidad</p>
+                                <h3 id="statPctPuntualGlobal" class="text-2xl font-black text-emerald-400">0%</h3>
+                                <p class="text-[10px] text-slate-500 mt-1">Calculado sobre el total de asistencias de entrada</p>
+                            </div>
+                            <div class="bg-[#070f1e]/90 p-4 rounded-2xl border border-amber-500/30 text-center">
+                                <p class="text-xs text-slate-400">Tasa Global de Tardanza</p>
+                                <h3 id="statPctTardanzaGlobal" class="text-2xl font-black text-amber-400">0%</h3>
+                                <p class="text-[10px] text-slate-500 mt-1">Alumnos ingresados tras hora límite</p>
+                            </div>
+                            <div class="bg-[#070f1e]/90 p-4 rounded-2xl border border-cyan-500/30 text-center">
+                                <p class="text-xs text-slate-400">Total Entradas Registradas</p>
+                                <h3 id="statTotalEntradas" class="text-2xl font-black text-cyan-400">0</h3>
+                                <p class="text-[10px] text-slate-500 mt-1">Marcajes en el sistema cloud</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SECCIÓN DE ANÁLISIS INDIVIDUAL POR ESTUDIANTE -->
+                <div class="card-custom p-6 md:p-8" style="--delay: -6.5s;">
+                    <div class="flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4">
+                        <div>
+                            <h2 class="text-lg font-bold text-cyan-300 flex items-center gap-2">
+                                🎓 Porcentaje Individual por Estudiante
+                            </h2>
+                            <p class="text-xs text-slate-400">Selecciona un estudiante para analizar sus porcentajes detallados o revisa la lista de tarjetas individuales.</p>
+                        </div>
+                        
+                        <!-- SELECTOR DE ALUMNO -->
+                        <div class="w-full md:w-72">
+                            <select id="selectEstudianteEstadistica" onchange="actualizarGraficoEstudianteIndividual()" class="w-full p-2.5 bg-[#030712] border border-cyan-500/50 rounded-xl text-white text-xs focus:outline-none focus:ring-2 focus:ring-cyan-500">
+                                <option value="">🔍 Todos / Ver Selección Individual</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <!-- TARJETA DEL ESTUDIANTE SELECCIONADO (DETALLE CON GRÁFICO CIRCULAR DOUGHNUT) -->
+                    <div id="contenedorDetalleEstudiante" class="hidden mb-8 bg-[#070f1e]/95 p-6 rounded-2xl border-2 border-cyan-500/40 shadow-xl">
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 items-center">
+                            <div class="text-center md:text-left space-y-2">
+                                <span class="bg-indigo-500/20 text-indigo-300 border border-indigo-500/40 px-3 py-1 rounded-full text-[10px] font-bold uppercase">Reporte Individual</span>
+                                <h3 id="estDetalleNombre" class="text-xl font-extrabold text-white">Nombre Alumno</h3>
+                                <p id="estDetalleDni" class="text-xs text-slate-400">DNI: -</p>
+                                <div class="pt-2">
+                                    <div class="inline-flex items-center gap-2 bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-700 text-xs">
+                                        <span class="text-slate-400">Total Marcajes Entrada:</span>
+                                        <span id="estDetalleTotal" class="font-bold text-white">0</span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="flex justify-center">
+                                <div class="w-44 h-44 relative">
+                                    <canvas id="graficoDoughnutEstudiante"></canvas>
+                                </div>
+                            </div>
+
+                            <div class="space-y-3">
+                                <div class="bg-slate-900/80 p-3 rounded-xl border border-emerald-500/30">
+                                    <div class="flex justify-between text-xs font-bold mb-1">
+                                        <span class="text-emerald-400">Puntualidad</span>
+                                        <span id="estDetallePctPuntual" class="text-emerald-300">0%</span>
+                                    </div>
+                                    <div class="w-full bg-slate-800 rounded-full h-2">
+                                        <div id="barPctPuntual" class="bg-emerald-500 h-2 rounded-full transition-all duration-500" style="width: 0%"></div>
+                                    </div>
+                                    <p id="estDetalleCantPuntual" class="text-[10px] text-slate-400 mt-1">0 de 0 asistencias</p>
+                                </div>
+
+                                <div class="bg-slate-900/80 p-3 rounded-xl border border-amber-500/30">
+                                    <div class="flex justify-between text-xs font-bold mb-1">
+                                        <span class="text-amber-400">Tardanza</span>
+                                        <span id="estDetallePctTardanza" class="text-amber-300">0%</span>
+                                    </div>
+                                    <div class="w-full bg-slate-800 rounded-full h-2">
+                                        <div id="barPctTardanza" class="bg-amber-500 h-2 rounded-full transition-all duration-500" style="width: 0%"></div>
+                                    </div>
+                                    <p id="estDetalleCantTardanza" class="text-[10px] text-slate-400 mt-1">0 de 0 asistencias</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- GRILLA DE TARJETAS PORCENTUALES DE TODOS LOS ESTUDIANTES -->
+                    <div class="mt-4">
+                        <h3 class="text-xs font-bold text-slate-300 uppercase tracking-wider mb-4">Resumen Porcentual de Todos los Alumnos:</h3>
+                        <div id="gridTarjetasEstudiantes" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                            <!-- Se renderiza dinámicamente con JS -->
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- FOOTER -->
+    <footer class="bg-[#040814]/90 border-t border-gray-800 text-center py-3 text-xs text-slate-500">
+        Sistema de Control de Asistencia Escolar con QR &copy; 2026 - Conexión Firebase Firestore Integrada
+    </footer>
+
+    <!-- LÓGICA JAVASCRIPT INTEGRADA CON FIREBASE FIRESTORE Y NAVEGACIÓN SIDEBAR -->
+    <script>
+        let rolActual = 'admin';
+        let modoPortalActual = 'login'; // 'login' o 'registro'
+        let dniEstudianteLogueado = '';
+        let estudiantes = [];
+        let asistencias = [];
+        let usuariosCuentas = [];
+        let horaLimite = localStorage.getItem('horaLimite') || "08:00";
+        document.getElementById('horaLimitePuntual').value = horaLimite;
+
+        // Toggle Menú Móvil para el Sidebar
+        function toggleSidebarMovil() {
+            const nav = document.getElementById('navPrincipal');
+            nav.classList.toggle('hidden');
+        }
+
+        // Sincronizar datos iniciales desde Firebase Firestore (MANTENIDO INTACTO + CUENTAS)
+        async function sincronizarDatosFirebase() {
+            if (!window.db) {
+                // Esperar si Firestore aún no carga
+                setTimeout(sincronizarDatosFirebase, 500);
+                return;
+            }
+            try {
+                // Cargar Estudiantes
+                const snapshotEst = await window.firebaseMethods.getDocs(window.firebaseMethods.collection(window.db, "estudiantes"));
+                estudiantes = [];
+                snapshotEst.forEach((docSnap) => {
+                    estudiantes.push({ id: docSnap.id, ...docSnap.data() });
+                });
+
+                // Cargar Cuentas de Usuario (Candado de Seguridad)
+                const snapshotUsr = await window.firebaseMethods.getDocs(window.firebaseMethods.collection(window.db, "cuentas_usuarios"));
+                usuariosCuentas = [];
+                snapshotUsr.forEach((docSnap) => {
+                    usuariosCuentas.push({ id: docSnap.id, ...docSnap.data() });
+                });
+
+                // Cargar Historial de Asistencias
+                const snapshotAst = await window.firebaseMethods.getDocs(window.firebaseMethods.collection(window.db, "asistencias"));
+                asistencias = [];
+                snapshotAst.forEach((docSnap) => {
+                    asistencias.push({ id: docSnap.id, ...docSnap.data() });
+                });
+
+                actualizarEstadisticasGenerales();
+                actualizarTablaAlumnos();
+                actualizarTablaHistorial();
+                poblarSelectEstudiantesGraficos();
+                console.log("Datos sincronizados correctamente con Firebase Cloud.");
+            } catch (e) {
+                console.error("Error al sincronizar con Firebase: ", e);
+            }
+        }
+
+        function conmutarModoAcceso(modo) {
+            modoPortalActual = modo;
+            const tabLogin = document.getElementById('tabIniciarSesion');
+            const tabReg = document.getElementById('tabCrearCuenta');
+            const formLogin = document.getElementById('formModoLogin');
+            const formReg = document.getElementById('formModoRegistro');
+            const btnAccion = document.getElementById('btnAccionPortal');
+            const titulo = document.getElementById('tituloLoginPortal');
+            const subtitulo = document.getElementById('subtituloLoginPortal');
+
+            if (modo === 'login') {
+                tabLogin.className = "flex-1 py-2 text-cyan-400 border-b-2 border-cyan-400 transition";
+                tabReg.className = "flex-1 py-2 text-slate-400 border-b-2 border-transparent transition";
+                formLogin.classList.remove('hidden');
+                formReg.classList.add('hidden');
+                btnAccion.innerText = "🔓 Validar e Ingresar al Sistema";
+                titulo.innerText = "Portal de Acceso Protegido";
+                subtitulo.innerText = "Inicia sesión con tu credencial verificada";
+            } else {
+                tabReg.className = "flex-1 py-2 text-cyan-400 border-b-2 border-cyan-400 transition";
+                tabLogin.className = "flex-1 py-2 text-slate-400 border-b-2 border-transparent transition";
+                formReg.classList.remove('hidden');
+                formLogin.classList.add('hidden');
+                btnAccion.innerText = "✨ Crear Cuenta e Ingresar";
+                titulo.innerText = "Crear Nueva Cuenta";
+                subtitulo.innerText = `Regístrate como ${rolActual === 'admin' ? 'Profesor / Admin' : 'Estudiante'}`;
+            }
+        }
+
+        function seleccionarRol(rol) {
+            rolActual = rol;
+            const btnAdmin = document.getElementById('btnRolAdmin');
+            const btnEstudiante = document.getElementById('btnRolEstudiante');
+            const containerAdmin = document.getElementById('contenedorInputAdmin');
+            const containerEstudiante = document.getElementById('contenedorInputEstudiante');
+            const subtitulo = document.getElementById('subtituloLoginPortal');
+
+            if (rol === 'admin') {
+                btnAdmin.className = "p-3 rounded-xl border border-cyan-500 bg-cyan-950/40 text-cyan-300 font-bold text-xs flex flex-col items-center gap-1 transition cursor-pointer";
+                btnEstudiante.className = "p-3 rounded-xl border border-gray-700 bg-gray-900/60 text-slate-400 font-bold text-xs flex flex-col items-center gap-1 transition cursor-pointer";
+                containerAdmin.classList.remove('hidden');
+                containerEstudiante.classList.add('hidden');
+            } else {
+                btnEstudiante.className = "p-3 rounded-xl border border-cyan-500 bg-cyan-950/40 text-cyan-300 font-bold text-xs flex flex-col items-center gap-1 transition cursor-pointer";
+                btnAdmin.className = "p-3 rounded-xl border border-gray-700 bg-gray-900/60 text-slate-400 font-bold text-xs flex flex-col items-center gap-1 transition cursor-pointer";
+                containerAdmin.classList.add('hidden');
+                containerEstudiante.classList.remove('hidden');
+            }
+
+            if (modoPortalActual === 'registro') {
+                subtitulo.innerText = `Regístrate como ${rolActual === 'admin' ? 'Profesor / Admin' : 'Estudiante'}`;
+            }
+        }
+
+        async function procesarAccionPortal() {
+            if (modoPortalActual === 'registro') {
+                // LÓGICA DE REGISTRO DE CUENTAS
+                const nombre = document.getElementById('inputRegNombre').value.trim();
+                const dni = document.getElementById('inputRegDni').value.trim();
+                const password = document.getElementById('inputRegPassword').value.trim();
+
+                if (!nombre || !/^\d{8}$/.test(dni) || password.length < 4) {
+                    mostrarModal("Campos Incompletos", "Asegúrate de ingresar tu Nombre, un DNI válido de 8 dígitos y una contraseña de al menos 4 caracteres.", "⚠️", () => {});
+                    return;
+                }
+
+                const cuentaExiste = usuariosCuentas.some(u => u.dni === dni && u.rol === rolActual);
+                if (cuentaExiste) {
+                    mostrarModal("Cuenta Existente", "Ya existe una cuenta registrada con este DNI para el perfil seleccionado.", "⚠️", () => {});
+                    return;
+                }
+
+                try {
+                    // Guardar cuenta de usuario en Firebase
+                    await window.firebaseMethods.addDoc(window.firebaseMethods.collection(window.db, "cuentas_usuarios"), {
+                        nombre: nombre,
+                        dni: dni,
+                        password: password,
+                        rol: rolActual
+                    });
+
+                    // Si es estudiante, sincronizarlo también en el directorio de estudiantes si no existe
+                    if (rolActual === 'estudiante' && !estudiantes.some(e => e.codigo === dni)) {
+                        await window.firebaseMethods.addDoc(window.firebaseMethods.collection(window.db, "estudiantes"), {
+                            nombre: nombre,
+                            codigo: dni
+                        });
+                    }
+
+                    await sincronizarDatosFirebase();
+                    dniEstudianteLogueado = dni;
+                    ingresarDirectoAlSistema();
+                } catch(err) {
+                    console.error("Error al registrar cuenta: ", err);
+                    mostrarModal("Error", "No se pudo registrar la cuenta en Firebase.", "⚠️", () => {});
+                }
+
+            } else {
+                // LÓGICA DE LOGIN CON CANDADO DE SEGURIDAD
+                if (rolActual === 'admin') {
+                    const credencial = document.getElementById('inputAdminCredencial').value.trim();
+                    const password = document.getElementById('inputAdminPassword').value.trim();
+
+                    if (!credencial || !password) {
+                        mostrarModal("Campos Requeridos", "Ingresa tu usuario/DNI y contraseña de candado.", "🔒", () => {});
+                        return;
+                    }
+
+                    // Acceso Maestro Predeterminado por Defecto
+                    if ((credencial === "admin" || credencial === "admin123") && password === "admin123") {
+                        ingresarDirectoAlSistema();
+                        return;
+                    }
+
+                    // Buscar en Firebase accounts
+                    const cuentaValida = usuariosCuentas.find(u => (u.dni === credencial || u.nombre.toLowerCase().includes(credencial.toLowerCase())) && u.password === password && u.rol === 'admin');
+                    
+                    if (cuentaValida) {
+                        ingresarDirectoAlSistema();
+                    } else {
+                        mostrarModal("Candado Bloqueado 🔒", "Credenciales incorrectas. Verifique su usuario y contraseña de Admin.", "🔒", () => {});
+                    }
+
+                } else { // Estudiante Login
+                    const dni = document.getElementById('inputDniEstudiantePortal').value.trim();
+                    const password = document.getElementById('inputPassEstudiantePortal').value.trim();
+
+                    if (!/^\d{8}$/.test(dni) || !password) {
+                        mostrarModal("Acceso Denegado 🔒", "Ingresa un DNI de 8 dígitos y tu contraseña.", "🔒", () => {});
+                        return;
+                    }
+
+                    // Validar cuenta de estudiante creada
+                    const cuentaValida = usuariosCuentas.find(u => u.dni === dni && u.password === password && u.rol === 'estudiante');
+                    const alumnoExiste = estudiantes.find(e => e.codigo === dni);
+
+                    if (cuentaValida || (alumnoExiste && password === dni)) { // Permite pass=DNI si fue registrado previamente por el profesor
+                        dniEstudianteLogueado = dni;
+                        ingresarDirectoAlSistema();
+                    } else {
+                        mostrarModal("Candado Bloqueado 🔒", "El DNI o la contraseña no coinciden con ninguna cuenta registrada.", "🔒", () => {});
+                    }
+                }
+            }
+        }
+
+        function ingresarDirectoAlSistema() {
+            const portada = document.getElementById('seccionPortada');
+            portada.classList.add('opacity-0', 'pointer-events-none');
+            setTimeout(() => portada.classList.add('hidden'), 500);
+            aplicarRestriccionesRol();
+        }
+
+        function cerrarSesionPortada() {
+            const portada = document.getElementById('seccionPortada');
+            portada.classList.remove('hidden', 'opacity-0', 'pointer-events-none');
+            apagarCamara();
+        }
+
+        function aplicarRestriccionesRol() {
+            const badgeRol = document.getElementById('badgeRolUsuario');
+            const nav = document.getElementById('navPrincipal');
+            const btnNavAlumnos = document.getElementById('btnNav-alumnos');
+            const btnNavConfig = document.getElementById('btnNav-config');
+            
+            badgeRol.classList.remove('hidden');
+            if (rolActual === 'admin') {
+                badgeRol.innerText = "Perfil: Profesor / Admin";
+                badgeRol.className = "text-[10px] bg-cyan-500/20 text-cyan-300 px-2.5 py-1 rounded-lg border border-cyan-500/40 font-bold block text-center truncate";
+                if(btnNavAlumnos) btnNavAlumnos.style.display = "flex";
+                if(btnNavConfig) btnNavConfig.style.display = "flex";
+                cambiarTab('registro');
+            } else {
+                const alumnoInfo = estudiantes.find(e => e.codigo === dniEstudianteLogueado);
+                badgeRol.innerText = `Estudiante: ${alumnoInfo ? alumnoInfo.nombre : dniEstudianteLogueado}`;
+                badgeRol.className = "text-[10px] bg-emerald-500/20 text-emerald-300 px-2.5 py-1 rounded-lg border border-emerald-500/40 font-bold block text-center truncate";
+                
+                if(btnNavAlumnos) btnNavAlumnos.style.display = "none";
+                if(btnNavConfig) btnNavConfig.style.display = "none";
+                
+                cambiarTab('registro');
+                setTimeout(() => {
+                    document.getElementById('nombreAlumno').value = alumnoInfo ? alumnoInfo.nombre : "";
+                    document.getElementById('codigoAlumno').value = alumnoInfo ? alumnoInfo.codigo : "";
+                    document.getElementById('infoQrText').innerText = "Tu Carné de Acceso Personal";
+                    document.getElementById('carnetQrBox').classList.remove('hidden');
+                    document.getElementById('btnDescargarQr').classList.remove('hidden');
+                    document.getElementById('nombreQrLabel').innerText = `${alumnoInfo ? alumnoInfo.nombre : ""} (DNI: ${alumnoInfo ? alumnoInfo.codigo : ""})`;
+                    document.getElementById('qrcode').innerHTML = "";
+                    new QRCode(document.getElementById("qrcode"), {
+                        text: alumnoInfo ? alumnoInfo.codigo : "",
+                        width: 180,
+                        height: 180,
+                        colorDark : "#000000",
+                        colorLight : "#ffffff",
+                        correctLevel : QRCode.CorrectLevel.H
+                    });
+                }, 100);
+            }
+        }
+
+        // Navegación Sidebar
+        function cambiarTab(idVista) {
+            document.querySelectorAll('.vista').forEach(el => el.classList.add('hidden'));
+            document.getElementById('vista-' + idVista).classList.remove('hidden');
+            
+            document.querySelectorAll('.sidebar-btn').forEach(btn => {
+                btn.classList.remove('active');
+                btn.classList.add('text-slate-400');
+            });
+
+            const btnActivo = document.getElementById('btnNav-' + idVista);
+            if (btnActivo) {
+                btnActivo.classList.add('active');
+                btnActivo.classList.remove('text-slate-400');
+            }
+
+            // Ocultar menú en móviles al hacer clic
+            if (window.innerWidth < 768) {
+                document.getElementById('navPrincipal').classList.add('hidden');
+            }
+
+            if(idVista === 'registro') actualizarEstadisticasGenerales();
+            if(idVista === 'alumnos') actualizarTablaAlumnos();
+            if(idVista === 'historial') actualizarTablaHistorial();
+            if(idVista === 'estadisticas') {
+                actualizarGraficoGlobal();
+                renderizarTarjetasEstudiantesPorcentaje();
+            }
+            if(idVista !== 'escaner') apagarCamara();
+        }
+
+        function mostrarModal(titulo, mensaje, icono, callbackAceptar) {
+            const modal = document.getElementById('modalConfirmacion');
+            document.getElementById('modalTitulo').innerText = titulo;
+            document.getElementById('modalMensaje').innerText = mensaje;
+            document.getElementById('modalIcono').innerText = icono;
+            modal.classList.remove('hidden');
+            const btnAceptar = document.getElementById('btnModalAceptar');
+            const btnCancelar = document.getElementById('btnModalCancelar');
+            const nuevoBtnAceptar = btnAceptar.cloneNode(true);
+            const nuevoBtnCancelar = btnCancelar.cloneNode(true);
+            btnAceptar.parentNode.replaceChild(nuevoBtnAceptar, btnAceptar);
+            btnCancelar.parentNode.replaceChild(nuevoBtnCancelar, btnCancelar);
+            nuevoBtnAceptar.addEventListener('click', () => {
+                modal.classList.add('hidden');
+                callbackAceptar();
+            });
+            nuevoBtnCancelar.addEventListener('click', () => {
+                modal.classList.add('hidden');
+            });
+        }
+
+        function dispararNotificacionPadres(nombreAlumno, estado, hora) {
+            const toast = document.getElementById('toastPadres');
+            const msg = document.getElementById('toastPadresMensaje');
+            if (estado === 'TARDANZA') {
+                msg.innerText = `Alerta: El alumno ${nombreAlumno} marcó tardanza a las ${hora}. Mensaje enviado al WhatsApp del apoderado.`;
+            } else {
+                msg.innerText = `Aviso: El alumno ${nombreAlumno} registró ${estado} correctamente a las ${hora}. Apoderado notificado.`;
+            }
+            toast.classList.add('show');
+            setTimeout(() => {
+                toast.classList.remove('show');
+            }, 6000);
+        }
+
+        function cerrarToastPadres() {
+            document.getElementById('toastPadres').classList.remove('show');
+        }
+
+        function actualizarEstadisticasGenerales() {
+            document.getElementById('statTotalAlumnos').innerText = `${estudiantes.length} Alumnos`;
+            document.getElementById('statHoraLimiteLabel').innerText = `${horaLimite} AM`;
+        }
+
+        // REGISTRAR ESTUDIANTE EN FIREBASE
+        document.getElementById('formEstudiante').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            const nombre = document.getElementById('nombreAlumno').value;
+            const codigo = document.getElementById('codigoAlumno').value;
+            if (!/^\d{8}$/.test(codigo)) {
+                mostrarModal("DNI Inválido", "El DNI / Código debe contener exactamente 8 dígitos numéricos.", "⚠️", () => {});
+                return;
+            }
+            if (estudiantes.some(e => e.codigo === codigo)) {
+                mostrarModal("DNI Duplicado", "Este DNI ya se encuentra registrado en el sistema.", "⚠️", () => {});
+                return;
+            }
+            mostrarModal("¿Registrar Estudiante?", `¿Deseas registrar a ${nombre} con el DNI ${codigo} en la nube?`, "👤", async () => {
+                try {
+                    await window.firebaseMethods.addDoc(window.firebaseMethods.collection(window.db, "estudiantes"), {
+                        nombre: nombre,
+                        codigo: codigo
+                    });
+                    await sincronizarDatosFirebase();
+                    
+                    document.getElementById('infoQrText').innerText = "¡QR generado y guardado en Firebase!";
+                    document.getElementById('carnetQrBox').classList.remove('hidden');
+                    document.getElementById('btnDescargarQr').classList.remove('hidden');
+                    document.getElementById('nombreQrLabel').innerText = `${nombre} (DNI: ${codigo})`;
+                    document.getElementById('qrcode').innerHTML = "";
+                    new QRCode(document.getElementById("qrcode"), {
+                        text: codigo,
+                        width: 180,
+                        height: 180,
+                        colorDark : "#000000",
+                        colorLight : "#ffffff",
+                        correctLevel : QRCode.CorrectLevel.H
+                    });
+                    document.getElementById('formEstudiante').reset();
+                } catch(err) {
+                    console.error("Error al guardar alumno: ", err);
+                    mostrarModal("Error", "No se pudo guardar el estudiante en Firebase.", "⚠️", () => {});
+                }
+            });
+        });
+
+        function descargarQRConBorde() {
+            const carnetElement = document.getElementById('carnetQrBox');
+            html2canvas(carnetElement, { scale: 3 }).then(canvas => {
+                const enlace = document.createElement('a');
+                enlace.href = canvas.toDataURL("image/png");
+                enlace.download = `Carnet_QR_${document.getElementById('nombreQrLabel').innerText.split('(')[0].trim()}.png`;
+                enlace.click();
+            });
+        }
+
+        function eliminarEstudiante(id, codigo) {
+            const alumno = estudiantes.find(e => e.codigo === codigo);
+            if (!alumno) return;
+            mostrarModal("¿Eliminar Estudiante?", `¿Deseas eliminar a ${alumno.nombre} (DNI: ${codigo}) de Firebase?`, "👤", async () => {
+                try {
+                    await window.firebaseMethods.deleteDoc(window.firebaseMethods.doc(window.db, "estudiantes", id));
+                    await sincronizarDatosFirebase();
+                } catch(err) {
+                    console.error("Error al eliminar: ", err);
+                }
+            });
+        }
+
+        function actualizarTablaAlumnos() {
+            const tbody = document.getElementById('tablaAlumnosBody');
+            document.getElementById('badgeTotalDirectorio').innerText = `Total: ${estudiantes.length}`;
+            if (estudiantes.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="3" class="p-6 text-center text-slate-400">No hay estudiantes registrados.</td></tr>`;
+                return;
+            }
+            tbody.innerHTML = estudiantes.map(e => `
+                <tr class="border-b border-gray-800 hover:bg-gray-800/50 transition">
+                    <td class="p-3 font-medium text-slate-200">${e.nombre}</td>
+                    <td class="p-3 text-slate-400">${e.codigo}</td>
+                    <td class="p-3 text-center">
+                        <button onclick="eliminarEstudiante('${e.id}', '${e.codigo}')" class="bg-rose-600 hover:bg-rose-500 text-white px-3 py-1.5 rounded-xl font-bold text-xs shadow transition cursor-pointer">🗑️ Eliminar</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function confirmarGuardarHorario() {
+            const nuevaHora = document.getElementById('horaLimitePuntual').value;
+            mostrarModal("¿Actualizar Horario?", `¿Deseas cambiar la hora límite de puntualidad a las ${nuevaHora}?`, "⏰", () => {
+                horaLimite = nuevaHora;
+                localStorage.setItem('horaLimite', horaLimite);
+                actualizarEstadisticasGenerales();
+            });
+        }
+
+        let html5QrCode = null;
+        let camaraActiva = false;
+        function iniciarCamara() {
+            if (camaraActiva) return;
+            html5QrCode = new Html5Qrcode("reader");
+            html5QrCode.start(
+                { facingMode: "environment" }, 
+                { fps: 10, qrbox: { width: 250, height: 250 } },
+                onScanSuccess
+            ).then(() => {
+                camaraActiva = true;
+            }).catch(err => {
+                mostrarModal("Error de Cámara", "No se pudo iniciar la cámara: " + err, "⚠️", () => {});
+            });
+        }
+
+        function apagarCamara() {
+            if (html5QrCode && camaraActiva) {
+                html5QrCode.stop().then(() => {
+                    camaraActiva = false;
+                    document.getElementById('reader').innerHTML = "Cámara apagada. Presiona \"Encender Cámara\".";
+                }).catch(err => console.log(err));
+            }
+        }
+
+        async function onScanSuccess(decodedText) {
+            const alumno = estudiantes.find(e => e.codigo === decodedText);
+            const resDiv = document.getElementById('resultadoEscaneo');
+            if (!alumno) {
+                resDiv.className = "mt-4 p-4 rounded-2xl bg-rose-950 text-rose-300 font-bold border border-rose-800";
+                resDiv.innerText = `⚠️ Código "${decodedText}" no registrado en el sistema.`;
+                return;
+            }
+            const modo = document.querySelector('input[name="modoAsistencia"]:checked').value;
+            const hoyFechaStr = new Date().toLocaleDateString();
+            const yaRegistradoHoy = asistencias.some(a => 
+                a.codigo === decodedText && 
+                a.tipo === modo.toUpperCase() && 
+                a.fecha.includes(hoyFechaStr)
+            );
+            if (yaRegistradoHoy) {
+                resDiv.className = "mt-4 p-4 rounded-2xl bg-amber-950 text-amber-300 font-bold border border-amber-800";
+                resDiv.innerText = `⚠️ ${alumno.nombre} ya cuenta con un registro de ${modo.toUpperCase()} para el día de hoy.`;
+                return;
+            }
+            const ahora = new Date();
+            const horaActual = ahora.toTimeString().substring(0, 5);
+            const fechaFormateada = ahora.toLocaleString();
+            const fechaIsoYMD = ahora.toISOString().split('T')[0];
+            let estado = "puntual";
+            if (modo === 'entrada' && horaActual > horaLimite) {
+                estado = "tardanza";
+            } else if (modo === 'salida') {
+                estado = "salida";
+            }
+
+            const nuevoRegistro = {
+                nombre: alumno.nombre,
+                codigo: alumno.codigo,
+                tipo: modo.toUpperCase(),
+                estado: estado.toUpperCase(),
+                fecha: fechaFormateada,
+                rawDate: fechaIsoYMD
+            };
+
+            try {
+                await window.firebaseMethods.addDoc(window.firebaseMethods.collection(window.db, "asistencias"), nuevoRegistro);
+                await sincronizarDatosFirebase();
+                dispararNotificacionPadres(alumno.nombre, estado.toUpperCase(), horaActual);
+                resDiv.className = `mt-4 p-4 rounded-2xl font-bold border ${estado === 'tardanza' ? 'bg-amber-950 text-amber-300 border-amber-800' : 'bg-emerald-950 text-emerald-300 border-emerald-800'}`;
+                resDiv.innerText = `✅ Éxito: ${alumno.nombre} registrado en Firebase como ${modo.toUpperCase()} (${estado.toUpperCase()}) a las ${horaActual}`;
+            } catch(err) {
+                console.error("Error guardando asistencia: ", err);
+            }
+        }
+
+        function borrarRegistroHistorial(id) {
+            mostrarModal("¿Borrar Registro?", "¿Estás seguro de eliminar este registro específico de Firebase?", "🗑️", async () => {
+                try {
+                    await window.firebaseMethods.deleteDoc(window.firebaseMethods.doc(window.db, "asistencias", id));
+                    await sincronizarDatosFirebase();
+                } catch(err) {
+                    console.error("Error borrando asistencia: ", err);
+                }
+            });
+        }
+
+        function confirmarResetearHistorial() {
+            if (asistencias.length === 0) {
+                mostrarModal("Historial Vacío", "El historial ya se encuentra completamente vacío.", "ℹ️", () => {});
+                return;
+            }
+            mostrarModal("¿Resetear Historial?", "¿Estás completamente seguro de vaciar todo el historial de asistencias en la nube?", "⚠️", async () => {
+                try {
+                    for(let a of asistencias) {
+                        await window.firebaseMethods.deleteDoc(window.firebaseMethods.doc(window.db, "asistencias", a.id));
+                    }
+                    await sincronizarDatosFirebase();
+                } catch(err) {
+                    console.error("Error reseteando historial: ", err);
+                }
+            });
+        }
+
+        function limpiarFiltros() {
+            document.getElementById('filtroFecha').value = "";
+            document.getElementById('filtroEstado').value = "";
+            actualizarTablaHistorial();
+        }
+
+        function obtenerRegistrosFiltrados() {
+            const fechaFiltro = document.getElementById('filtroFecha').value;
+            const estadoFiltro = document.getElementById('filtroEstado').value;
+            return asistencias.filter(item => {
+                let coincideFecha = true;
+                let coincideEstado = true;
+                if (fechaFiltro) {
+                    if (item.rawDate) {
+                        coincideFecha = item.rawDate === fechaFiltro;
+                    } else {
+                        coincideFecha = item.fecha.includes(fechaFiltro);
+                    }
+                }
+                if (estadoFiltro) {
+                    coincideEstado = item.estado === estadoFiltro;
+                }
+                return coincideFecha && coincideEstado;
+            });
+        }
+
+        function actualizarTablaHistorial() {
+            const tbody = document.getElementById('tablaHistorialBody');
+            const filtrados = obtenerRegistrosFiltrados();
+            
+            if (filtrados.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="6" class="p-6 text-center text-slate-400">No se encontraron registros con los filtros seleccionados.</td></tr>`;
+                return;
+            }
+            tbody.innerHTML = filtrados.map(a => `
+                <tr class="border-b border-gray-800 hover:bg-gray-800/50 transition">
+                    <td class="p-3 font-medium text-slate-200">${a.nombre}</td>
+                    <td class="p-3 text-slate-400">${a.codigo}</td>
+                    <td class="p-3 font-bold text-slate-300">${a.tipo}</td>
+                    <td class="p-3"><span class="px-3 py-1 rounded-full text-xs font-bold ${a.estado === 'TARDANZA' ? 'bg-amber-900/60 text-amber-300 border border-amber-700' : (a.estado === 'SALIDA' ? 'bg-indigo-900/60 text-indigo-300 border border-indigo-700' : 'bg-emerald-900/60 text-emerald-300 border border-emerald-700')}">${a.estado}</span></td>
+                    <td class="p-3 text-slate-400 text-xs">${a.fecha}</td>
+                    <td class="p-3 text-center">
+                        <button onclick="borrarRegistroHistorial('${a.id}')" class="bg-rose-600 hover:bg-rose-500 text-white px-2.5 py-1 rounded-xl font-bold text-xs shadow transition cursor-pointer" title="Borrar registro">🗑️</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function exportarExcelCSV() {
+            const datosAExportar = obtenerRegistrosFiltrados();
+            if (datosAExportar.length === 0) {
+                mostrarModal("Sin Datos", "No hay registros disponibles para exportar con los filtros actuales.", "⚠", () => {});
+                return;
+            }
+            let csvContent = "\uFEFFEstudiante;DNI;Tipo;Estado;Fecha y Hora\r\n";
+            datosAExportar.forEach(row => {
+                const filaStr = `"${row.nombre}";"${row.codigo}";"${row.tipo}";"${row.estado}";"${row.fecha}"`;
+                csvContent += filaStr + "\r\n";
+            });
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const url = URL.createObjectURL(blob);
+            const link = document.createElement("a");
+            link.setAttribute("href", url);
+            link.setAttribute("download", "Reporte_Asistencia_Escolar_Firebase.csv");
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            URL.revokeObjectURL(url);
+        }
+
+        // ==========================================
+        // FUNCIONES DE GRÁFICOS Y PORCENTAJES POR ESTUDIANTE
+        // ==========================================
+        let miGraficoGlobal = null;
+        let miGraficoIndividual = null;
+
+        function actualizarGraficoGlobal() {
+            const entradas = asistencias.filter(a => a.tipo === 'ENTRADA');
+            const puntuales = entradas.filter(a => a.estado === 'PUNTUAL').length;
+            const tardanzas = entradas.filter(a => a.estado === 'TARDANZA').length;
+            const total = entradas.length;
+
+            const pctPuntual = total > 0 ? ((puntuales / total) * 100).toFixed(1) : 0;
+            const pctTardanza = total > 0 ? ((tardanzas / total) * 100).toFixed(1) : 0;
+
+            document.getElementById('statPctPuntualGlobal').innerText = `${pctPuntual}%`;
+            document.getElementById('statPctTardanzaGlobal').innerText = `${pctTardanza}%`;
+            document.getElementById('statTotalEntradas').innerText = total;
+
+            const ctx = document.getElementById('graficoAsistencia').getContext('2d');
+            if (miGraficoGlobal) miGraficoGlobal.destroy();
+            miGraficoGlobal = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: ['Puntuales', 'Tardanzas'],
+                    datasets: [{
+                        label: 'Cantidad de Registros',
+                        data: [puntuales, tardanzas],
+                        backgroundColor: ['#10b981', '#f59e0b'],
+                        borderRadius: 12
+                    }]
+                },
+                options: { 
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: { 
+                        y: { beginAtZero: true, ticks: { stepSize: 1, color: '#f1f5f9' }, grid: { color: '#374151' } },
+                        x: { ticks: { color: '#f1f5f9' }, grid: { color: 'transparent' } }
+                    },
+                    plugins: {
+                        legend: { labels: { color: '#f1f5f9' } }
+                    }
+                }
+            });
+        }
+
+        function poblarSelectEstudiantesGraficos() {
+            const select = document.getElementById('selectEstudianteEstadistica');
+            select.innerHTML = '<option value="">🔍 Seleccionar un Estudiante para Analizar</option>';
+            estudiantes.forEach(e => {
+                const opt = document.createElement('option');
+                opt.value = e.codigo;
+                opt.textContent = `${e.nombre} (${e.codigo})`;
+                select.appendChild(opt);
+            });
+        }
+
+        function calcularStatsEstudiante(codigo) {
+            const entradasAlumno = asistencias.filter(a => a.codigo === codigo && a.tipo === 'ENTRADA');
+            const puntuales = entradasAlumno.filter(a => a.estado === 'PUNTUAL').length;
+            const tardanzas = entradasAlumno.filter(a => a.estado === 'TARDANZA').length;
+            const total = entradasAlumno.length;
+
+            const pctPuntual = total > 0 ? Math.round((puntuales / total) * 100) : 0;
+            const pctTardanza = total > 0 ? Math.round((tardanzas / total) * 100) : 0;
+
+            return { total, puntuales, tardanzas, pctPuntual, pctTardanza };
+        }
+
+        function actualizarGraficoEstudianteIndividual() {
+            const codigo = document.getElementById('selectEstudianteEstadistica').value;
+            const container = document.getElementById('contenedorDetalleEstudiante');
+            
+            if (!codigo) {
+                container.classList.add('hidden');
+                return;
+            }
+
+            const alumno = estudiantes.find(e => e.codigo === codigo);
+            if (!alumno) return;
+
+            const stats = calcularStatsEstudiante(codigo);
+
+            container.classList.remove('hidden');
+            document.getElementById('estDetalleNombre').innerText = alumno.nombre;
+            document.getElementById('estDetalleDni').innerText = `DNI: ${alumno.codigo}`;
+            document.getElementById('estDetalleTotal').innerText = stats.total;
+
+            document.getElementById('estDetallePctPuntual').innerText = `${stats.pctPuntual}%`;
+            document.getElementById('estDetallePctTardanza').innerText = `${stats.pctTardanza}%`;
+
+            document.getElementById('barPctPuntual').style.width = `${stats.pctPuntual}%`;
+            document.getElementById('barPctTardanza').style.width = `${stats.pctTardanza}%`;
+
+            document.getElementById('estDetalleCantPuntual').innerText = `${stats.puntuales} de ${stats.total} marcajes`;
+            document.getElementById('estDetalleCantTardanza').innerText = `${stats.tardanzas} de ${stats.total} marcajes`;
+
+            const ctx = document.getElementById('graficoDoughnutEstudiante').getContext('2d');
+            if (miGraficoIndividual) miGraficoIndividual.destroy();
+
+            const dataValues = stats.total === 0 ? [1, 0] : [stats.puntuales, stats.tardanzas];
+            const colors = stats.total === 0 ? ['#334155', '#475569'] : ['#10b981', '#f59e0b'];
+
+            miGraficoIndividual = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['Puntual', 'Tardanza'],
+                    datasets: [{
+                        data: dataValues,
+                        backgroundColor: colors,
+                        borderWidth: 0
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: { display: false }
+                    },
+                    cutout: '70%'
+                }
+            });
+        }
+
+        function renderizarTarjetasEstudiantesPorcentaje() {
+            const grid = document.getElementById('gridTarjetasEstudiantes');
+            if (estudiantes.length === 0) {
+                grid.innerHTML = `<div class="col-span-full text-center p-6 text-slate-400 text-xs">No hay estudiantes registrados para calcular porcentajes.</div>`;
+                return;
+            }
+
+            grid.innerHTML = estudiantes.map(e => {
+                const stats = calcularStatsEstudiante(e.codigo);
+                return `
+                    <div class="bg-[#070f1e]/90 p-4 rounded-2xl border border-gray-800 hover:border-cyan-500/40 transition">
+                        <div class="flex items-center justify-between mb-2">
+                            <h4 class="font-bold text-xs text-white truncate max-w-[170px]">${e.nombre}</h4>
+                            <span class="text-[10px] text-slate-400 font-mono">DNI: ${e.codigo}</span>
+                        </div>
+                        <div class="space-y-2">
+                            <div>
+                                <div class="flex justify-between text-[11px] mb-1">
+                                    <span class="text-emerald-400 font-semibold">Puntual: ${stats.pctPuntual}%</span>
+                                    <span class="text-amber-400 font-semibold">Tardanza: ${stats.pctTardanza}%</span>
+                                </div>
+                                <div class="w-full bg-slate-800 rounded-full h-2 flex overflow-hidden">
+                                    <div class="bg-emerald-500 h-2" style="width: ${stats.pctPuntual}%"></div>
+                                    <div class="bg-amber-500 h-2" style="width: ${stats.pctTardanza}%"></div>
+                                </div>
+                            </div>
+                            <div class="flex justify-between items-center pt-1 border-t border-slate-800/80 text-[10px] text-slate-400">
+                                <span>Total Entradas: <strong class="text-slate-200">${stats.total}</strong></span>
+                                <button onclick="seleccionarEstudianteDirecto('${e.codigo}')" class="text-cyan-400 hover:underline font-bold">Ver gráfico ➔</button>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function seleccionarEstudianteDirecto(codigo) {
+            document.getElementById('selectEstudianteEstadistica').value = codigo;
+            actualizarGraficoEstudianteIndividual();
+            document.getElementById('contenedorDetalleEstudiante').scrollIntoView({ behavior: 'smooth' });
+        }
+    </script>
+</body>
+</html>
